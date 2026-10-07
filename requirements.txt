@@ -1,0 +1,4 @@
+fast-alpr[onnx]
+opencv-python-headless
+streamlit
+pandas

@@ -1,0 +1,45 @@
+# Demo de control vehicular por placas.
+#   app     la página web (Streamlit)
+#   camara  vigila una cámara todo el tiempo y registra los accesos
+#   caddy   publica la página con HTTPS y contraseña
+# Se configura con el archivo .env (lo crea despliegue/instalar.sh).
+services:
+  app:
+    build: .
+    image: control-placas
+    restart: unless-stopped
+    volumes:
+      - datos:/datos
+    expose:
+      - "8501"
+
+  camara:
+    build: .
+    image: control-placas
+    depends_on: [app]
+    restart: unless-stopped
+    command: ["python", "vigilar_camara.py"]
+    volumes:
+      - datos:/datos
+    environment:
+      CAMARA_URL: ${CAMARA_URL:-/app/demo/video_prueba_venezuela.mp4}
+      CAMARA_NOMBRE: ${CAMARA_NOMBRE:-entrada}
+      REPETIR_VIDEO: ${REPETIR_VIDEO:-1}
+      CUADROS_SEG: ${CUADROS_SEG:-4}
+      ESPERA_SEG: ${ESPERA_SEG:-60}
+      SOLO_VENEZUELA: ${SOLO_VENEZUELA:-1}
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./despliegue/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+
+volumes:
+  datos:
+  caddy_datos:

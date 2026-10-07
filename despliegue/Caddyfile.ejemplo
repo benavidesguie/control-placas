@@ -1,0 +1,4 @@
+# Lo reescribe despliegue/instalar.sh con tu dominio, usuario y contraseña.
+:80 {
+	reverse_proxy app:8501
+}

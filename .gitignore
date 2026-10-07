@@ -1,0 +1,12 @@
+__pycache__/
+.venv/
+.env
+datos/
+resultados*/
+evaluacion/sinteticas/
+evaluacion/resultados_comparacion/
+despliegue/Caddyfile
+demo/*.mp4
+videos/*
+!videos/.gitkeep
+*.zip
