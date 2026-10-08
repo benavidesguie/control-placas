@@ -1,6 +1,6 @@
 import pytest
 
-from reglas_venezuela import normalizar
+from reglas_venezuela import normalizar, tipo
 
 
 @pytest.mark.parametrize("leido, esperado", [
@@ -36,3 +36,16 @@ def test_carro_y_moto_de_7_caracteres_no_se_confunden():
     assert normalizar("AB123CD") == "AB123CD"   # carro
     assert normalizar("AB1C23D") == "AB1C23D"   # moto
     assert normalizar("A81C23D") == "AB1C23D"   # moto con una B leída como 8
+
+
+@pytest.mark.parametrize("placa, esperado", [
+    ("AB123CD", "Carro"),
+    ("ABC12D", "Carro"),
+    ("ABC123", "Carro"),
+    ("AX7V56D", "Moto"),
+    ("5AU5341", "Otro"),  # placa extranjera (con "Solo placas venezolanas" apagado)
+    ("", "Otro"),
+    (None, "Otro"),
+])
+def test_tipo_de_vehiculo(placa, esperado):
+    assert tipo(placa) == esperado

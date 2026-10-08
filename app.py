@@ -3,6 +3,7 @@
 Ejecutar:  streamlit run app.py
 Luego abrir http://localhost:8501 en el navegador.
 """
+import base64
 import os
 import tempfile
 import time
@@ -16,6 +17,9 @@ import streamlit as st
 import motor
 import registro
 from registro import cargar_autorizadas, registrar
+from reglas_venezuela import tipo
+
+ICONO_TIPO = {"Carro": "🚗", "Moto": "🏍️"}
 
 st.set_page_config(page_title="Control vehicular", page_icon="🚗", layout="wide")
 
@@ -36,9 +40,16 @@ def a_rgb(img):
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
 
+def con_tipo(df):
+    """Agrega la columna tipo (Carro / Moto) al lado de la placa, según su formato."""
+    df = df.copy()
+    df.insert(df.columns.get_loc("placa") + 1, "tipo", df["placa"].map(tipo))
+    return df
+
+
 def tabla_eventos(eventos):
     if eventos:
-        st.dataframe(pd.DataFrame(eventos)[["fecha_hora", "placa", "estado", "confianza"]],
+        st.dataframe(con_tipo(pd.DataFrame(eventos))[["fecha_hora", "placa", "tipo", "estado", "confianza"]],
                      hide_index=True, width="stretch")
     else:
         st.caption("Todavía no se ha confirmado ninguna placa.")
@@ -49,7 +60,7 @@ with st.sidebar:
     st.header("Ajustes")
     reglas = st.toggle("Solo placas venezolanas", value=True,
                        help="Corrige confusiones como O/0 o B/8 y descarta textos que no son placas "
-                            "venezolanas (AB123CD, ABC12D, ABC123). Apágalo para probar con placas de otros países.")
+                            "venezolanas (carros AB123CD, ABC12D, ABC123; motos AB1C23D). Apágalo para probar con placas de otros países.")
     cada = st.slider("En video, analizar 1 de cada N cuadros", 1, 30, 5,
                      help="Más alto = más rápido, pero puede perder carros que pasan rápido.")
     espera = st.slider("No repetir la misma placa durante (segundos)", 10, 600, 60)
@@ -90,7 +101,7 @@ def en_vivo():
         if df is None or df.empty:
             st.caption("Todavía no hay accesos.")
         else:
-            st.dataframe(df.iloc[::-1].head(12)[["fecha_hora", "placa", "estado", "fuente"]],
+            st.dataframe(con_tipo(df.iloc[::-1].head(12))[["fecha_hora", "placa", "tipo", "estado", "fuente"]],
                          hide_index=True, width="stretch")
 
 
@@ -119,7 +130,8 @@ with tab_leer:
                     for f in lecturas:
                         e = motor.estado(f["placa"], autorizadas)
                         icono = {"Autorizada": "✅", "No registrada": "⛔"}.get(e, "🔎")
-                        st.metric(f"{icono} {e}", f["placa"], f"confianza {f['conf_ocr']:.0%}",
+                        t = tipo(f["placa"])
+                        st.metric(f"{icono} {e} · {ICONO_TIPO.get(t, '')} {t}", f["placa"], f"confianza {f['conf_ocr']:.0%}",
                                   delta_color="off")
                     if st.button("Registrar acceso", key=f"reg_{arch.name}"):
                         for f in lecturas:
@@ -210,31 +222,64 @@ with tab_leer:
                         cap.grab()
 
 # ---------------------------------------------------------------- registro
+@st.cache_data(max_entries=2000, show_spinner=False)
+def miniatura(nombre):
+    """Foto de evidencia en pequeño para la tabla (las capturas no cambian: se calcula una vez)."""
+    img = cv2.imread(os.path.join(registro.CAPTURAS, str(nombre)))
+    if img is None:
+        return None
+    alto = 120
+    img = cv2.resize(img, (int(img.shape[1] * alto / img.shape[0]), alto), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    return "data:image/jpeg;base64," + base64.b64encode(buf).decode() if ok else None
+
+
 @st.fragment(run_every=5)
-def tabla_registro(buscar):
+def tabla_registro(buscar, filtro_tipo):
     df = leer_accesos()
     if df is None:
         st.info("Aún no hay accesos registrados. Lee una foto, un video o conecta una cámara.")
         return
-    c1, c2, c3 = st.columns(3)
+    df = con_tipo(df)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Accesos registrados", len(df))
-    c2.metric("Autorizados", int((df["estado"] == "Autorizada").sum()))
-    c3.metric("No registrados", int((df["estado"] == "No registrada").sum()))
+    c2.metric("🚗 Carros", int((df["tipo"] == "Carro").sum()))
+    c3.metric("🏍️ Motos", int((df["tipo"] == "Moto").sum()))
+    c4.metric("No registrados", int((df["estado"] == "No registrada").sum()))
     vista_df = df[df["placa"].str.contains(buscar, na=False)] if buscar else df
+    if filtro_tipo != "Todos":
+        vista_df = vista_df[vista_df["tipo"] == filtro_tipo.rstrip("s")]
     vista_df = vista_df.iloc[::-1]
-    st.dataframe(vista_df.drop(columns=["captura"]), hide_index=True, width="stretch")
+    tabla = vista_df.copy()
+    tabla.insert(0, "evidencia", tabla["captura"].map(miniatura))
+    st.dataframe(tabla.drop(columns=["captura"]), hide_index=True, width="stretch", row_height=70,
+                 column_config={"evidencia": st.column_config.ImageColumn("Evidencia", width="small")})
     st.download_button("Descargar registro (CSV)", df.to_csv(index=False).encode(), "accesos.csv", "text/csv")
-    with st.expander("Ver capturas recientes"):
-        cols = st.columns(4)
-        for k, (_, fila) in enumerate(vista_df.head(8).iterrows()):
-            ruta = os.path.join(registro.CAPTURAS, str(fila["captura"]))
-            if os.path.exists(ruta):
-                cols[k % 4].image(ruta, caption=f"{fila['placa']} · {fila['fecha_hora']}")
+
+    # Foto completa de un acceso, para ver la placa en grande o guardarla como evidencia
+    opciones = {f"{f.fecha_hora} · {f.placa} · {f.tipo}": f for f in vista_df.head(200).itertuples()}
+    if opciones:
+        st.subheader("Evidencia fotográfica")
+        elegido = st.selectbox("Acceso", list(opciones), key="evidencia_elegida")
+        fila = opciones[elegido]
+        ruta = os.path.join(registro.CAPTURAS, str(fila.captura))
+        if os.path.exists(ruta):
+            c1, c2 = st.columns([3, 1])
+            c1.image(ruta, width="stretch")
+            c2.metric(f"{ICONO_TIPO.get(fila.tipo, '')} {fila.tipo}", fila.placa)
+            c2.caption(f"{fila.fecha_hora}  \n{fila.estado} · confianza {fila.confianza}  \nFuente: {fila.fuente}")
+            with open(ruta, "rb") as fh:
+                c2.download_button("Descargar foto", fh.read(), str(fila.captura), "image/jpeg")
+        else:
+            st.caption("La foto de este acceso ya no está guardada.")
 
 
 with tab_registro:
-    buscar = st.text_input("Buscar placa").strip().upper()
-    tabla_registro(buscar)
+    c_buscar, c_tipo = st.columns([3, 2])
+    buscar = c_buscar.text_input("Buscar placa").strip().upper()
+    filtro_tipo = c_tipo.segmented_control("Tipo de vehículo", ["Todos", "Carros", "Motos"],
+                                           default="Todos") or "Todos"
+    tabla_registro(buscar, filtro_tipo)
     if os.path.exists(registro.ARCH_ACCESOS) and st.button("Borrar registro"):
         os.remove(registro.ARCH_ACCESOS)
         st.rerun()
