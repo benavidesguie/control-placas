@@ -21,6 +21,7 @@ MAX_CORRECCIONES = 2  # más cambios que esto ya no es una placa venezolana mal 
 
 # L = letra, N = número
 FORMATOS = {7: ["LLNNNLL", "LLNLNNL"], 6: ["LLLNNL", "LLLNNN"]}
+MOTO = {"LLNLNNL"}  # formatos de moto; el resto de FORMATOS son de carro
 
 
 def _aplicar(t, patron):
@@ -48,3 +49,14 @@ def normalizar(texto):
     if not candidatos:
         return None
     return min(candidatos, key=lambda r: sum(a != b for a, b in zip(r, t)))
+
+
+def tipo_vehiculo(placa):
+    """'Moto' si la placa tiene formato de moto, 'Carro' si es de carro, 'Otro' si no es venezolana."""
+    t = re.sub(r"[^A-Z0-9]", "", (placa or "").upper())
+    patron = "".join("L" if c.isalpha() else "N" for c in t)
+    if patron in MOTO:
+        return "Moto"
+    if patron in FORMATOS.get(len(t), []):
+        return "Carro"
+    return "Otro"

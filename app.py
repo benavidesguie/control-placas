@@ -16,6 +16,7 @@ import streamlit as st
 import motor
 import registro
 from registro import cargar_autorizadas, registrar
+from reglas_venezuela import tipo_vehiculo
 
 st.set_page_config(page_title="Control vehicular", page_icon="🚗", layout="wide")
 
@@ -38,7 +39,9 @@ def a_rgb(img):
 
 def tabla_eventos(eventos):
     if eventos:
-        st.dataframe(pd.DataFrame(eventos)[["fecha_hora", "placa", "estado", "confianza"]],
+        df = pd.DataFrame(eventos)
+        df["tipo"] = df["placa"].map(tipo_vehiculo)
+        st.dataframe(df[["fecha_hora", "placa", "tipo", "estado", "confianza"]],
                      hide_index=True, width="stretch")
     else:
         st.caption("Todavía no se ha confirmado ninguna placa.")
@@ -63,7 +66,10 @@ tab_vivo, tab_leer, tab_registro, tab_autorizadas = st.tabs(
 
 def leer_accesos():
     if os.path.exists(registro.ARCH_ACCESOS):
-        return pd.read_csv(registro.ARCH_ACCESOS)
+        df = pd.read_csv(registro.ARCH_ACCESOS)
+        # El tipo se deduce de la placa, así los registros viejos también lo tienen
+        df.insert(2, "tipo", df["placa"].map(tipo_vehiculo))
+        return df
     return None
 
 
@@ -211,30 +217,41 @@ with tab_leer:
 
 # ---------------------------------------------------------------- registro
 @st.fragment(run_every=5)
-def tabla_registro(buscar):
+def tabla_registro(buscar, tipo):
     df = leer_accesos()
     if df is None:
         st.info("Aún no hay accesos registrados. Lee una foto, un video o conecta una cámara.")
         return
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Accesos registrados", len(df))
-    c2.metric("Autorizados", int((df["estado"] == "Autorizada").sum()))
-    c3.metric("No registrados", int((df["estado"] == "No registrada").sum()))
+    c2.metric("Carros", int((df["tipo"] == "Carro").sum()))
+    c3.metric("Motos", int((df["tipo"] == "Moto").sum()))
+    c4.metric("Autorizados", int((df["estado"] == "Autorizada").sum()))
+    c5.metric("No registrados", int((df["estado"] == "No registrada").sum()))
     vista_df = df[df["placa"].str.contains(buscar, na=False)] if buscar else df
-    vista_df = vista_df.iloc[::-1]
-    st.dataframe(vista_df.drop(columns=["captura"]), hide_index=True, width="stretch")
+    if tipo != "Todos":
+        vista_df = vista_df[vista_df["tipo"] == tipo]
+    vista_df = vista_df.iloc[::-1].reset_index(drop=True)
+    st.caption("Toca una fila para ver la foto de evidencia.")
+    sel = st.dataframe(vista_df.drop(columns=["captura"]), hide_index=True, width="stretch",
+                       on_select="rerun", selection_mode="single-row", key="tabla_accesos")
     st.download_button("Descargar registro (CSV)", df.to_csv(index=False).encode(), "accesos.csv", "text/csv")
-    with st.expander("Ver capturas recientes"):
-        cols = st.columns(4)
-        for k, (_, fila) in enumerate(vista_df.head(8).iterrows()):
-            ruta = os.path.join(registro.CAPTURAS, str(fila["captura"]))
-            if os.path.exists(ruta):
-                cols[k % 4].image(ruta, caption=f"{fila['placa']} · {fila['fecha_hora']}")
+    if len(vista_df):
+        filas = sel.selection.rows
+        fila = vista_df.iloc[filas[0] if filas else 0]
+        ruta = os.path.join(registro.CAPTURAS, str(fila["captura"]))
+        st.subheader(f"Evidencia: {fila['placa']} ({fila['tipo']}) · {fila['fecha_hora']}")
+        if os.path.exists(ruta):
+            st.image(ruta, caption=f"{fila['estado']} · confianza {fila['confianza']} · {fila['fuente']}")
+        else:
+            st.caption("La foto de este registro ya no está en el servidor.")
 
 
 with tab_registro:
-    buscar = st.text_input("Buscar placa").strip().upper()
-    tabla_registro(buscar)
+    f1, f2 = st.columns([2, 1])
+    buscar = f1.text_input("Buscar placa").strip().upper()
+    tipo = f2.selectbox("Tipo de vehículo", ["Todos", "Carro", "Moto", "Otro"])
+    tabla_registro(buscar, tipo)
     if os.path.exists(registro.ARCH_ACCESOS) and st.button("Borrar registro"):
         os.remove(registro.ARCH_ACCESOS)
         st.rerun()
