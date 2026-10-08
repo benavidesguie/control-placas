@@ -25,6 +25,8 @@ def texto_aleatorio(formato):
     N = lambda k: "".join(random.choices(string.digits, k=k))
     if formato == "vigente":
         return L(2) + N(3) + L(2)
+    if formato == "moto":
+        return L(2) + N(1) + L(1) + N(2) + L(1)
     if formato == "anterior":
         return L(3) + N(2) + L(1)
     return L(3) + N(3)
@@ -104,7 +106,7 @@ def main(salida="sinteticas", n=80, semilla=7):
     fs = fondos(os.path.join(os.path.dirname(__file__), "..", "video2.mp4"))
     filas = []
     for i in range(n):
-        formato = random.choices(["vigente", "anterior", "antiguo"], [0.7, 0.2, 0.1])[0]
+        formato = random.choices(["vigente", "anterior", "antiguo", "moto"], [0.55, 0.15, 0.1, 0.2])[0]
         texto = texto_aleatorio(formato)
         # Dificultad: ancho de la placa en píxeles y desenfoque
         ancho = random.choice([70, 100, 140, 200])

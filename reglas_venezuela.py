@@ -4,7 +4,8 @@ Formatos que se aceptan:
   AB123CD  carro, formato vigente (2 letras, 3 números, 2 letras)
   ABC12D   carro, formato anterior
   ABC123   carro, formato más antiguo
-Las motos tienen formatos propios que faltan por confirmar con fotos reales.
+  AB1C23D  moto, formato vigente (confirmado con la foto de una moto de Aragua: AX7V56D)
+Otros formatos de moto (más antiguos) faltan por confirmar con fotos reales.
 
 El OCR confunde letras y números parecidos (O/0, I/1, B/8...). Como cada
 posición del formato es siempre letra o siempre número, se corrige por
@@ -19,7 +20,7 @@ A_NUMERO = {"O": "0", "D": "0", "Q": "0", "U": "0", "I": "1", "L": "1", "J": "1"
 MAX_CORRECCIONES = 2  # más cambios que esto ya no es una placa venezolana mal leída
 
 # L = letra, N = número
-FORMATOS = {7: ["LLNNNLL"], 6: ["LLLNNL", "LLLNNN"]}
+FORMATOS = {7: ["LLNNNLL", "LLNLNNL"], 6: ["LLLNNL", "LLLNNN"]}
 
 
 def _aplicar(t, patron):
@@ -42,8 +43,8 @@ def normalizar(texto):
     if len(t) == 6:
         # El último carácter distingue ABC12D de ABC123: se respeta lo leído
         patrones = [p for p in patrones if (p[-1] == "L") == t[-1].isalpha()]
-    for p in patrones:
-        r = _aplicar(t, p)
-        if r:
-            return r
-    return None
+    # Si cabe en más de un formato (carro y moto de 7 caracteres), gana el que necesita menos cambios
+    candidatos = [r for r in (_aplicar(t, p) for p in patrones) if r]
+    if not candidatos:
+        return None
+    return min(candidatos, key=lambda r: sum(a != b for a, b in zip(r, t)))
