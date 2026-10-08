@@ -20,7 +20,7 @@ def alpr():
     return motor.crear_alpr()
 
 
-@pytest.mark.parametrize("placa", ["AB123CD", "XK508PM", "RTL896"])
+@pytest.mark.parametrize("placa", ["AB123CD", "XK508PM", "RTL896", "AX7V56D"])
 def test_lee_placa_venezolana_clara(alpr, placa):
     import motor
     random.seed(1)

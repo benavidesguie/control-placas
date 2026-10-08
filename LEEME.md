@@ -40,7 +40,7 @@ lecturas que difieren en una letra se juntan y gana la más repetida.
 |---|---|
 | `app.py` | La app |
 | `motor.py` | Lectura de placas, dibujo y confirmación de carros |
-| `reglas_venezuela.py` | Formatos AB123CD, ABC12D y ABC123 y corrección de letras/números |
+| `reglas_venezuela.py` | Formatos de carro AB123CD, ABC12D y ABC123, y de moto AB1C23D y corrección de letras/números |
 | `leer_placas.py` | Versión por línea de comandos |
 | `registro.py` | Lista de autorizadas y registro de accesos |
 | `vigilar_camara.py` | Servicio que vigila una cámara 24/7 (en el servidor) |
@@ -64,7 +64,7 @@ Para el modo En vivo del servidor con video de demostración, poner un video en
 ## Límites conocidos
 
 - Probado con placas venezolanas generadas, no con fotos reales todavía.
-- Las placas de moto aún no están en las reglas.
+- De moto solo está el formato vigente (AB1C23D); faltan los antiguos.
 - En el formato anterior ABC12D, si la última letra parece un número (Q y 9,
   O y 0) se puede leer como ABC123.
 - Para leer bien, la placa debe medir al menos 140 px de ancho en la imagen.
